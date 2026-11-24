@@ -601,7 +601,18 @@ enum ggml_status naive_compute(ggml_cgraph * cgraph,
 
     for (size_t i = 0; i < input_names.size(); i++) {
         const auto & param_name = input_names[i];
-        auto input_tensor = get_ov_input_tensor(decoder, param_name);
+        const auto * input = decoder->get_input_ggml_tensor(param_name);
+        ov::Tensor input_tensor;
+        if ((device == "NPU" || device == "CPU") && input->view_src != nullptr) {
+            // The fragment declares this input with its GGML dimensions. A view's
+            // shared tensor extra describes the parent allocation, not this input.
+            const auto shape = GgmlOvDecoder::get_shape(input);
+            input_tensor = ggml_is_contiguous(input)
+                ? ov::Tensor(GgmlOvDecoder::get_ov_type(input), shape, input->data)
+                : make_contiguous_split_input_tensor(input, shape);
+        } else {
+            input_tensor = get_ov_input_tensor(decoder, param_name);
+        }
         infer_request->set_input_tensor(i, input_tensor);
     }
 

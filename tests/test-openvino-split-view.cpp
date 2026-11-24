@@ -7,7 +7,7 @@ int main() {
     auto backend = ggml_backend_init_by_name("OPENVINO0", nullptr);
     GGML_ASSERT(backend);
 
-    auto ctx = ggml_init({ggml_tensor_overhead() * 4 + ggml_graph_overhead(), nullptr, true});
+    auto ctx = ggml_init({ggml_tensor_overhead() * 6 + 2 * ggml_graph_overhead(), nullptr, true});
     auto input = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 8, 2);
     auto scaled = ggml_scale(ctx, input, 2.0f);
     auto window = ggml_view_2d(ctx, scaled, 3, 2, scaled->nb[1], sizeof(float));
@@ -18,6 +18,12 @@ int main() {
     ggml_set_name(consumer, "consumer");
     auto graph = ggml_new_graph(ctx);
     ggml_build_forward_expand(graph, consumer);
+    auto reshaped = ggml_reshape_2d(ctx, input, 4, 4);
+    auto squares = ggml_sqr(ctx, reshaped);
+    ggml_set_name(reshaped, "reshaped");
+    ggml_set_name(squares, "squares");
+    auto square_graph = ggml_new_graph(ctx);
+    ggml_build_forward_expand(square_graph, squares);
     auto buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
     GGML_ASSERT(buffer);
 
@@ -37,6 +43,17 @@ int main() {
         for (int col = 0; col < 3; ++col) {
             GGML_ASSERT(result[col] == 2.0f * values[row * 8 + col + 1]);
         }
+    }
+    // The input to this fragment has the same storage as input, but different dimensions.
+    ggml_cgraph tail = *square_graph;
+    GGML_ASSERT(tail.n_nodes == 2 && tail.nodes[0] == reshaped);
+    ++tail.nodes;
+    --tail.n_nodes;
+    GGML_ASSERT(ggml_backend_graph_compute(backend, &tail) == GGML_STATUS_SUCCESS);
+    float result[16];
+    ggml_backend_tensor_get(squares, result, 0, sizeof(result));
+    for (int i = 0; i < 16; ++i) {
+        GGML_ASSERT(result[i] == values[i] * values[i]);
     }
     ggml_backend_buffer_free(buffer);
     ggml_free(ctx);
