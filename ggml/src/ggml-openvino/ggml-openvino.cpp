@@ -1160,6 +1160,10 @@ static ggml_openvino_op_support is_op_supported_case(const ggml_tensor * op) {
         if (op->ne[3] != 1) {
             return {false, "GET_ROWS/SET_ROWS with ne[3] != 1 (ne[3]=" + std::to_string(op->ne[3]) + ") is not supported"};
         }
+        if (op->op == GGML_OP_GET_ROWS && ggml_openvino_is_npu() &&
+            op->src[0]->type == GGML_TYPE_Q4_K && strcmp(op->src[0]->name, "token_embd.weight") == 0) {
+            return {false, "NPU cannot compile Q4_K token embedding subtraction"};
+        }
         if (op->op == GGML_OP_GET_ROWS && ggml_is_quantized(op->src[0]->type) &&
             op->src[0]->view_src != nullptr && op->src[0]->view_offs != 0) {
             return {false, "GET_ROWS with a nonzero quantized src0 view offset is not supported"};

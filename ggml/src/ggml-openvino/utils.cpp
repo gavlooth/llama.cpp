@@ -1152,6 +1152,20 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, const std::shared
     if (is_naive(cgraph)) {
         return naive_compute(cgraph, core, device, config, *r_ctx->compiled_cache);
     }
+    // A recurrent-only split carries state explicitly and has no attention position input.
+    bool recurrent = false;
+    bool has_positions = false;
+    for (int i = 0; i < cgraph->n_nodes; ++i) {
+        const auto * node = cgraph->nodes[i];
+        recurrent |= node->op == GGML_OP_GATED_DELTA_NET;
+        for (auto * src : node->src) {
+            if (!src) break;
+            has_positions |= GgmlOvDecoder::is_inp_pos(src, node);
+        }
+    }
+    if (recurrent && !has_positions) {
+        return naive_compute(cgraph, core, device, without_npuw(config), *r_ctx->compiled_cache);
+    }
 
     auto start_time = ggml_time_us();
 
