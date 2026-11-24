@@ -855,9 +855,6 @@ std::pair<ModelParams, ComputeParams> GgmlOvDecoder::compute_llm_params(ggml_cgr
                 model_params.mixed_rope_params = true;
             }
         }
-        if (node->op == GGML_OP_GATED_DELTA_NET) {
-            model_params.state_size = node->src[0]->ne[0];
-        }
         if (node->op == GGML_OP_SCALE && node->view_src != nullptr && is_kvcache(node->view_src, nullptr)) {
             compute_params.cache_rs_reset_len = ggml_nelements(node) / node->view_src->ne[0];
             compute_params.cache_rs_reset_idx = node->src[0]->view_offs / node->view_src->ne[0];
@@ -1208,14 +1205,14 @@ void GgmlOvDecoder::compute_model_outputs() {
     for (int node_n = 0; node_n < m_cgraph->n_nodes; node_n++) {
         auto * cur_node = m_cgraph->nodes[node_n];
         // if the node op is NONE means this node is not used at all, we can skip it directly without adding to model outputs.
-        if (cur_node->op == GGML_OP_NONE || cur_node->op == GGML_OP_VIEW || cur_node->op == GGML_OP_RESHAPE) {
+        if (cur_node->op == GGML_OP_NONE) {
             continue;
         }
         auto cur_node_use_count = m_cgraph->use_counts[ggml_hash_find(&m_cgraph->visited_hash_set, cur_node)];
         if (cur_node_use_count == 0) {
-            // The output of in-place ops is the view_src tensor, which is updated in place. We should use the view_src name as the output name to make sure it can be correctly matched with the later ops that use the view_src.
-            if (cur_node != nullptr && ::is_inplace_op(cur_node) && ggml_nbytes(cur_node) > 0) {
-                cur_node = cur_node->view_src;
+            // A direct copy into a cache window returns the new window, not the old backing tensor.
+            if (auto * backing = updated_backing_tensor(cur_node)) {
+                cur_node = backing;
             }
         } else {
             int input_use_count = 0;
@@ -1232,6 +1229,17 @@ void GgmlOvDecoder::compute_model_outputs() {
             }
         }
         if (cur_node != nullptr) {
+            // A consumer in another split reads an alias through GGML's backing storage.
+            // Export the local producer, not the packed OV representation of a strided view.
+            auto * alias = cur_node;
+            while (cur_node->op == GGML_OP_VIEW || cur_node->op == GGML_OP_RESHAPE ||
+                   cur_node->op == GGML_OP_PERMUTE || cur_node->op == GGML_OP_TRANSPOSE) {
+                cur_node = cur_node->src[0];
+            }
+            if (cur_node != alias &&
+                std::find(m_cgraph->nodes, m_cgraph->nodes + node_n, cur_node) == m_cgraph->nodes + node_n) {
+                continue;  // The backing storage was supplied by an earlier split.
+            }
             std::string cur_node_name = get_tensor_ov_name(m_cgraph, cur_node);
             m_model_outputs[cur_node_name] = cur_node;
             m_model_output_names.insert(cur_node_name);
@@ -1821,17 +1829,21 @@ std::vector<std::string> GgmlOvDecoder::get_output_names(int node_idx) const {
     return {m_node_info_list[node_idx].node_name};
 }
 
-std::string GgmlOvDecoder::get_inplace_op_src(int node_idx) const {
-    auto * node = m_node_info_list[node_idx].node;
+ggml_tensor * GgmlOvDecoder::updated_backing_tensor(const ggml_tensor * node) const {
     if (!::is_inplace_op(node) || node->view_src == nullptr || ggml_nbytes(node) == 0) {
-        return "";
+        return nullptr;
     }
-    const int op_case = m_node_info_list[node_idx].node_op_case;
-    if (node->op == GGML_OP_CPY && (op_case == 1 || op_case == 2 || op_case == 3) &&
-        m_compute_params.s_copy_active_slot_len == -1) {
-        return "";
+    if (node->op == GGML_OP_CPY && m_compute_params.s_copy_active_slot_len == -1) {
+        const int op_case = compute_op_case(node);
+        if (op_case >= 1 && op_case <= 3) {
+            return nullptr;
+        }
     }
-    return get_tensor_ov_name(m_cgraph, node->view_src);
+    return node->view_src;
+}
+
+std::string GgmlOvDecoder::get_inplace_op_src(int node_idx) const {
+    return get_tensor_ov_name(m_cgraph, updated_backing_tensor(m_node_info_list[node_idx].node));
 }
 
 bool GgmlOvDecoder::is_view_like_alias_of(int node_idx, const std::string & view_src_name) const {

@@ -26,7 +26,8 @@ OutputVector translate_rms_norm(const NodeContext & context) {
 
     ov::Output<ov::Node> input_node;
     if (op_case == 2) {
-        auto ssm_state_size = context.get_ssm_state_size();
+        const auto input_shape = context.get_input_shape(0).to_shape();
+        const auto ssm_state_size = static_cast<int64_t>(input_shape[3]);
         // The GDN op packs [attn | new_state] along the row axis; the state occupies the last
         // ssm_state_size * n_seqs rows. Slice it off (scaling by the active sequence count) to keep
         // just the attention output.
@@ -44,7 +45,6 @@ OutputVector translate_rms_norm(const NodeContext & context) {
             ov::op::v0::Constant::create(ov::element::i64, {1}, {1}),
             ov::op::v0::Constant::create(ov::element::i64, {1}, {2}));
 
-        auto input_shape = context.get_input_shape(0).to_shape();
         input_node = std::make_shared<ov::op::v1::Reshape>(
             gdn_attn_output,
             ov::op::v0::Constant::create(

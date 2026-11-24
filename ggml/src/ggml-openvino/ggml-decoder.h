@@ -27,7 +27,6 @@ struct ModelParams {
     // small -c) while the head count does not.
     std::map<int, int> n_heads_kv_per_layer;
     int head_size = -1;
-    int state_size = -1;  // for SSM molels, eg qwen35
     int32_t rope_params[16];
     bool mixed_rope_params = false;
     bool is_cacheless_attn = false;
@@ -295,8 +294,6 @@ public:
 
     virtual bool has_mixed_rope_params() const override { return m_model_params.mixed_rope_params; }
 
-    virtual int get_ssm_state_size() const override { return m_model_params.state_size; }
-
     virtual std::map<std::string, std::string> get_kv_param_res_names() const override;
 
     virtual bool is_static() const override { return m_is_static; }
@@ -452,6 +449,7 @@ public:
 private:
     void set_input_output();
     int compute_op_case(const ggml_tensor * node) const;
+    ggml_tensor * updated_backing_tensor(const ggml_tensor * node) const;
     bool node_is_used_as_src(const int node_idx);
     void compute_model_inputs();
     void compute_model_outputs();

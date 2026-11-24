@@ -1410,6 +1410,17 @@ static ggml_openvino_op_support is_op_supported_case(const ggml_tensor * op) {
         }
         break;
     }
+    case GGML_OP_RMS_NORM: {
+        const auto * input = op->src[0];
+        const auto * packed = input->view_src;
+        if (ggml_openvino_is_npu() && packed && packed->op == GGML_OP_GATED_DELTA_NET &&
+            packed->src[0]->ne[1] != packed->src[2]->ne[1]) {
+            // Before normalization many attention values are FP16 subnormals.
+            // Keep them in FP32 with the grouped recurrent update that produced them.
+            return {false, "NPU flushes small recurrent attention values before RMS_NORM"};
+        }
+        break;
+    }
     case GGML_OP_GATED_DELTA_NET: {
         if (ggml_openvino_is_npu() && op->src[0]->ne[1] != op->src[2]->ne[1]) {
             return {false, "NPU grouped-head recurrent update requires CPU execution"};

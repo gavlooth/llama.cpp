@@ -111,7 +111,7 @@ OutputVector translate_cpy(const NodeContext & context) {
             if (context.has_input(src_begin_name)) {
                 state_begin = context.get_input(src_begin_name);
             } else {
-                auto ssm_state_size = context.get_ssm_state_size();
+                const auto ssm_state_size = input_shape[3].get_length();
                 if (context.has_input("s_copy_active_slot_len")) {
                     auto len = context.get_input("s_copy_active_slot_len");
                     auto state_rows = std::make_shared<ov::op::v1::Multiply>(
