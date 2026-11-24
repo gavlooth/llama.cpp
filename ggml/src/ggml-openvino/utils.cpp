@@ -1150,7 +1150,9 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, const std::shared
     const auto & config = ggml_openvino_get_compile_config();
 
     if (is_naive(cgraph)) {
-        return naive_compute(cgraph, core, device, config, *r_ctx->compiled_cache);
+        // Compile the fragment intact: partitioning can separate Q4_K zero-point
+        // subtraction from the MatMul that consumes the dequantized weight.
+        return naive_compute(cgraph, core, device, without_npuw(config), *r_ctx->compiled_cache);
     }
     // A recurrent-only split carries state explicitly and has no attention position input.
     bool recurrent = false;
