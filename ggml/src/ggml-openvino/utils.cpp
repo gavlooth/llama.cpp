@@ -623,6 +623,14 @@ enum ggml_status naive_compute(ggml_cgraph * cgraph,
             continue;
         }
         auto * ggml_tensor = model_output_it->second;
+        if (ggml_nbytes(ggml_tensor) == 0) {
+            GGML_LOG_DEBUG("OpenVINO: no rows to copy to %s (%zu result bytes)\n",
+                           output_names[i].c_str(), output_tensor.get_byte_size());
+            continue;
+        }
+        OPENVINO_ASSERT(output_tensor.get_byte_size() <= ggml_nbytes(ggml_tensor),
+                        "Output ", output_names[i], " has ", output_tensor.get_byte_size(),
+                        " bytes for a ", ggml_nbytes(ggml_tensor), "-byte destination");
         std::memcpy(ggml_tensor->data, output_tensor.data(), output_tensor.get_byte_size());
     }
     return GGML_STATUS_SUCCESS;
