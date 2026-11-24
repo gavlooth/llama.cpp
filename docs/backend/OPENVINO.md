@@ -795,6 +795,7 @@ build\ReleaseOV\bin\llama-simple.exe -m "C:\models\Llama-3.2-1B-Instruct-Q4_K_M.
 - Default context resolves to the model's training context (e.g. 131072 for Llama 3.2 1B), which can OOM or fail or degrade performance on NPU. Inspect the resolved value with `-lv 3`.
   - **Workaround:** Pass an explicit `-c <N>`, e.g. `-c 1024`.
 - NPU device uses a static graph with a fixed prefill chunk size (defaults to 256), configurable with `GGML_OPENVINO_PREFILL_CHUNK_SIZE`. Large prefill/batch settings may need tuning.
+- With partial NPU offload, matrix products whose weights are in a CPU buffer stay on CPU. `--no-warmup` does not disable the server's startup decode that checks whether it can remove part of a sequence.
 - `llama-server -np > 1` (multiple parallel sequences) is not supported.
 - `llama-perplexity`: requires `-b 512` or smaller.
 - Grouped-head `GATED_DELTA_NET` updates and their output RMS normalization run on CPU. On Meteor Lake, an isolated two-token update with 16 query/key heads and 48 value heads reset the NPU. Normalizing on CPU also preserves FP32 attention values that the NPU rounds to zero before normalization. Hybrid logits can still differ from CPU logits because the backend converts model weights and uses different arithmetic.

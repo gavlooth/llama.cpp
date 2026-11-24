@@ -1579,8 +1579,10 @@ static bool ggml_backend_openvino_device_supports_op(ggml_backend_dev_t dev, con
 }
 
 static bool ggml_backend_openvino_device_supports_buft(ggml_backend_dev_t dev, ggml_backend_buffer_type_t buft) {
-    return ggml_backend_buft_is_openvino(buft) || ggml_backend_buft_is_host(buft);
     GGML_UNUSED(dev);
+    // The scheduler chooses the first backend accepting the weight buffer.
+    // On NPU, accepting CPU buffers compiles CPU-assigned layers into NPU graphs.
+    return ggml_backend_buft_is_openvino(buft) || (!ggml_openvino_is_npu() && ggml_backend_buft_is_host(buft));
 }
 
 static const struct ggml_backend_device_i ggml_backend_openvino_device_interface = {
