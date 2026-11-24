@@ -1411,12 +1411,9 @@ static ggml_openvino_op_support is_op_supported_case(const ggml_tensor * op) {
         break;
     }
     case GGML_OP_GATED_DELTA_NET: {
-        // enable after https://github.com/openvinotoolkit/openvino/pull/35917 is included in OV release
-        // return true;
-        // if (ggml_openvino_get_device_name() == "GPU" && op->src[0]->ne[2] > 1) {
-        //     // CVS-186471
-        //     return true;
-        // }
+        if (ggml_openvino_is_npu() && op->src[0]->ne[1] != op->src[2]->ne[1]) {
+            return {false, "NPU grouped-head recurrent update requires CPU execution"};
+        }
         if (op->src[2]->op == GGML_OP_PERMUTE) {
             return {false, "GATED_DELTA_NET with PERMUTE src2 is not supported"};
         }

@@ -797,6 +797,7 @@ build\ReleaseOV\bin\llama-simple.exe -m "C:\models\Llama-3.2-1B-Instruct-Q4_K_M.
 - NPU device uses a static graph with a fixed prefill chunk size (defaults to 256), configurable with `GGML_OPENVINO_PREFILL_CHUNK_SIZE`. Large prefill/batch settings may need tuning.
 - `llama-server -np > 1` (multiple parallel sequences) is not supported.
 - `llama-perplexity`: requires `-b 512` or smaller.
+- Grouped-head `GATED_DELTA_NET` updates run on CPU. On Meteor Lake, the isolated NPU operation with two tokens, 16 query/key heads and 48 value heads triggered a driver reset. Avoiding the reset does not establish numerical agreement for the rest of a hybrid model.
 
 > [!NOTE]
 > The OpenVINO backend is actively under development. Fixes and improvements are underway, and this document will continue to be updated.

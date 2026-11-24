@@ -1167,14 +1167,11 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, const std::shared
         // subtraction from the MatMul that consumes the dequantized weight.
         return naive_compute(cgraph, core, device, without_npuw(config), *r_ctx->compiled_cache);
     }
-    // A recurrent-only split carries state explicitly and has no attention position input.
-    bool recurrent = false;
     bool has_positions = false;
     bool has_rope = false;
     bool has_tokens = false;
     for (int i = 0; i < cgraph->n_nodes; ++i) {
         const auto * node = cgraph->nodes[i];
-        recurrent |= node->op == GGML_OP_GATED_DELTA_NET;
         has_rope |= node->op == GGML_OP_ROPE;
         for (auto * src : node->src) {
             if (!src) break;
@@ -1184,7 +1181,7 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, const std::shared
     }
     // When rotary attention starts from existing activations, padding token IDs
     // cannot extend those activations. Compile the fragment at its real dimensions.
-    if ((recurrent && !has_positions) || (has_rope && !has_tokens)) {
+    if (!has_positions || (has_rope && !has_tokens)) {
         return naive_compute(cgraph, core, device, without_npuw(config), *r_ctx->compiled_cache);
     }
 
