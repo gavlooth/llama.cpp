@@ -1126,6 +1126,11 @@ ov::AnyMap without_npuw(const ov::AnyMap & config) {
         }
         out.insert(kv);
     }
+    if (auto dir = config.find("NPUW_CACHE_DIR"); dir != config.end()) {
+        out[ov::cache_dir.name()] = dir->second;
+        // Weightless NPU export fails for grouped Q4_K scales; store the executable with weights.
+        out[ov::cache_mode.name()] = ov::CacheMode::OPTIMIZE_SPEED;
+    }
     return out;
 }
 
